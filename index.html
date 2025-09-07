@@ -105,10 +105,15 @@
                     </label>
                 </div>
 
-                <!-- Analysis Button -->
-                <button id="analyzeBtn" class="w-full bg-gray-400 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed transition duration-300 shadow-sm" disabled>
-                    분석하기
-                </button>
+                <!-- Analysis & Save Buttons -->
+                <div class="flex flex-col md:flex-row lg:flex-col gap-2">
+                     <button id="analyzeBtn" class="w-full bg-gray-400 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed transition duration-300 shadow-sm" disabled>
+                        분석하기
+                    </button>
+                    <button id="saveBtn" class="w-full bg-gray-400 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed transition duration-300 shadow-sm" disabled>
+                        입력값 저장
+                    </button>
+                </div>
             </div>
              <p id="uploadStatus" class="text-sm text-gray-500 mt-4 text-center"></p>
         </section>
@@ -423,6 +428,8 @@
         let studentData = [];
         let uploadedFileName = '';
         let analysisResults = {}; // To store calculated class counts
+        let teacherData = {}; // To store teacher input values
+        const STORAGE_KEY = 'seorakHighSchoolTeacherData';
 
         const combinedCourseData = RAW_CMS_DATA.map(course => {
             const details = COURSE_DETAILS[course.slug] || {};
@@ -432,61 +439,40 @@
         // DOM Elements
         const uploadInput = document.getElementById('upload');
         const analyzeBtn = document.getElementById('analyzeBtn');
+        const saveBtn = document.getElementById('saveBtn');
         const uploadStatus = document.getElementById('uploadStatus');
         const maxStudentsInput = document.getElementById('maxStudents');
         const standardStudentsInput = document.getElementById('standardStudents');
         const cancelThresholdInput = document.getElementById('cancelThreshold');
+        const tabs = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
         const contentArea = document.getElementById('contentArea');
         const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
 
         // --- Event Listeners ---
         
+        // Initial Load
+        document.addEventListener('DOMContentLoaded', loadTeacherData);
+        
         // Close tooltips when clicking anywhere
         document.addEventListener('click', (e) => {
             if (!e.target.matches('.tooltip-trigger')) {
-                document.querySelectorAll('.tooltip-content').forEach(tooltip => {
+                document.querySelectorAll('.tooltip-content.show').forEach(tooltip => {
                     tooltip.classList.remove('show');
                 });
             }
         });
 
-        // Download template button
-        downloadTemplateBtn.addEventListener('click', downloadTemplate);
-
-        // Tab switching
-        const tabs = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                tabContents.forEach(content => content.classList.add('hidden'));
-                const contentId = tab.id.replace('tab', 'content');
-                document.getElementById(contentId).classList.remove('hidden');
-            });
-        });
-
-        // Check if analysis can be run
-        [maxStudentsInput, standardStudentsInput, cancelThresholdInput, uploadInput].forEach(el => {
-            el.addEventListener('input', checkAnalysisReady);
-            el.addEventListener('change', checkAnalysisReady);
-        });
-        
-        // Re-analyze on input change after initial analysis
-        [maxStudentsInput, standardStudentsInput, cancelThresholdInput].forEach(el => {
-             el.addEventListener('change', () => {
-                if (studentData.length > 0) {
-                   runAnalysis();
-                }
-            });
-        });
-
-        // File upload handler
+        // File upload change
         uploadInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
             uploadedFileName = file.name;
+            uploadStatus.textContent = `'${uploadedFileName}' 파일이 선택되었습니다.`;
+            uploadStatus.classList.remove('text-red-500', 'text-blue-600');
+            uploadStatus.classList.add('text-green-600');
+            
             const reader = new FileReader();
             reader.onload = (event) => {
                 const data = new Uint8Array(event.target.result);
@@ -494,12 +480,35 @@
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
                 studentData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                uploadStatus.textContent = `'${uploadedFileName}' 파일이 업로드되었습니다. 총 ${studentData.length - 1}명의 학생 데이터.`;
-                uploadStatus.classList.add('text-green-600');
                 checkAnalysisReady();
             };
             reader.readAsArrayBuffer(file);
         });
+        
+        // Input fields keyup
+        [maxStudentsInput, standardStudentsInput, cancelThresholdInput].forEach(input => {
+            input.addEventListener('keyup', checkAnalysisReady);
+        });
+
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(item => item.classList.remove('active'));
+                tab.classList.add('active');
+                
+                const targetContentId = tab.id.replace('tab', 'content');
+                tabContents.forEach(content => {
+                    if (content.id === targetContentId) {
+                        content.classList.remove('hidden');
+                    } else {
+                        content.classList.add('hidden');
+                    }
+                });
+            });
+        });
+        
+        // Download template button click
+        downloadTemplateBtn.addEventListener('click', downloadTemplate);
 
         // Analyze button click
         analyzeBtn.addEventListener('click', () => {
@@ -508,66 +517,91 @@
             runAnalysis();
         });
 
+        // Save button click
+        saveBtn.addEventListener('click', saveTeacherData);
+
 
         // --- Core Functions ---
 
         function toggleTooltip(event) {
-            event.stopPropagation(); // Prevent document click listener from firing immediately
-            const currentTooltip = event.target.nextElementSibling;
+            // Prevent event from bubbling up to the document listener
+            event.stopPropagation();
+            
+            const currentTrigger = event.target;
+            const currentTooltip = currentTrigger.nextElementSibling;
+            
             // Hide all other tooltips
-            document.querySelectorAll('.tooltip-content').forEach(tooltip => {
-                if(tooltip !== currentTooltip) tooltip.classList.remove('show');
+            document.querySelectorAll('.tooltip-content.show').forEach(tooltip => {
+                if (tooltip !== currentTooltip) {
+                    tooltip.classList.remove('show');
+                }
             });
+
             // Toggle the current one
             currentTooltip.classList.toggle('show');
+        }
+
+        function loadTeacherData() {
+            const savedData = localStorage.getItem(STORAGE_KEY);
+            if (savedData) {
+                teacherData = JSON.parse(savedData);
+                const statusP = document.getElementById('uploadStatus');
+                if(statusP) {
+                     statusP.textContent = '저장된 교원 데이터를 불러왔습니다.';
+                     statusP.classList.add('text-blue-600');
+                }
+            }
+        }
+
+        function saveTeacherData() {
+            if (saveBtn.disabled) return;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(teacherData));
+            
+            uploadStatus.textContent = `교원수 입력값이 브라우저에 저장되었습니다. (${new Date().toLocaleTimeString()})`;
+            uploadStatus.classList.remove('text-green-600');
+            uploadStatus.classList.add('text-blue-600');
+            
+            saveBtn.textContent = '저장 완료!';
+            saveBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+            saveBtn.classList.remove('bg-teal-500', 'hover:bg-teal-600');
+            setTimeout(() => {
+                saveBtn.textContent = '입력값 저장';
+                saveBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                saveBtn.classList.add('bg-teal-500', 'hover:bg-teal-600');
+            }, 2000);
         }
 
         function downloadTemplate() {
             // Main sheet for data entry
             const maxChoices = 15; // Allow for up to 15 choices
-            const header = ['학번', '이름'];
-            for (let i = 1; i <= maxChoices; i++) {
-                header.push(`선택과목${i}`);
-            }
-            const mainSheetData = [header];
-            const mainWorksheet = XLSX.utils.aoa_to_sheet(mainSheetData);
-            mainWorksheet['!cols'] = [{wch: 15}, {wch: 15}]; // 학번, 이름
-            for (let i = 0; i < maxChoices; i++) {
-                mainWorksheet['!cols'].push({wch: 25}); // 선택과목
-            }
-
-            // Sheet with list of available elective subjects
-            const uniqueElectiveSubjects = [...new Set(combinedCourseData
-                .filter(course => !course.required)
-                .map(course => course.subjectName))]
-                .sort((a, b) => a.localeCompare(b));
-
-            const subjectListData = [['선택 가능 과목 목록 (복사해서 사용하세요)']];
-            uniqueElectiveSubjects.forEach(name => subjectListData.push([name]));
+            const headers = ['학번', '이름', ...Array.from({ length: maxChoices }, (_, i) => `선택과목${i + 1}`)];
+            const studentDataSheet = [headers];
             
-            const subjectListWorksheet = XLSX.utils.aoa_to_sheet(subjectListData);
-            subjectListWorksheet['!cols'] = [{wch: 40}];
-            
-            // Create workbook and add sheets
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, mainWorksheet, '학생 선택 현황');
-            XLSX.utils.book_append_sheet(workbook, subjectListWorksheet, '선택가능과목');
+            // Second sheet for available subjects
+            const availableSubjects = [...new Set(combinedCourseData
+                .filter(c => !c.required)
+                .map(c => c.subjectName))]
+                .sort();
+            const availableSubjectsSheet = [['선택가능과목'], ...availableSubjects.map(s => [s])];
 
-            XLSX.writeFile(workbook, '설악고_선택과목_입력양식_v2.xlsx');
+            const wb = XLSX.utils.book_new();
+            const ws1 = XLSX.utils.aoa_to_sheet(studentDataSheet);
+            const ws2 = XLSX.utils.aoa_to_sheet(availableSubjectsSheet);
+            XLSX.utils.book_append_sheet(wb, ws1, '학생 선택 현황');
+            XLSX.utils.book_append_sheet(wb, ws2, '선택가능과목');
+            XLSX.writeFile(wb, '설악고_선택과목_입력양식.xlsx');
         }
 
         function checkAnalysisReady() {
-            const inputsFilled = maxStudentsInput.value && standardStudentsInput.value && cancelThresholdInput.value;
-            const fileUploaded = studentData.length > 0;
-
-            if (inputsFilled && fileUploaded) {
+            const allInputsFilled = maxStudentsInput.value && standardStudentsInput.value && cancelThresholdInput.value;
+            if (allInputsFilled && uploadedFileName) {
                 analyzeBtn.disabled = false;
                 analyzeBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
-                analyzeBtn.classList.add('bg-indigo-500', 'hover:bg-indigo-600');
+                analyzeBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
             } else {
                 analyzeBtn.disabled = true;
                 analyzeBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
-                analyzeBtn.classList.remove('bg-indigo-500', 'hover:bg-indigo-600');
+                analyzeBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
             }
         }
         
@@ -577,6 +611,10 @@
 
             renderSemester(1, studentCounts);
             renderSemester(2, studentCounts);
+
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+            saveBtn.classList.add('bg-teal-500', 'hover:bg-teal-600');
         }
 
 
@@ -584,147 +622,246 @@
             if (studentData.length < 2) return {};
             
             const counts = {};
-            const uniqueElectiveSubjects = [...new Set(combinedCourseData
-                .filter(course => !course.required)
-                .map(course => course.subjectName))];
-            uniqueElectiveSubjects.forEach(name => counts[name] = 0);
-
-            for (let i = 1; i < studentData.length; i++) {
-                const row = studentData[i];
-                for (let j = 2; j < row.length; j++) {
-                    const subjectName = row[j];
-                    if (subjectName && counts.hasOwnProperty(subjectName)) {
-                        counts[subjectName]++;
+            const subjectNameMap = new Map();
+            combinedCourseData.forEach(c => {
+                 subjectNameMap.set(c.subjectName.replace(/\s/g, ''), c.subjectName);
+            });
+            
+            const dataRows = studentData.slice(1); // Skip header row
+            dataRows.forEach(row => {
+                for(let i = 2; i < row.length; i++) {
+                    const subject = row[i];
+                    if (subject) {
+                        const normalizedSubject = subject.replace(/\s/g, '');
+                        const originalSubjectName = subjectNameMap.get(normalizedSubject) || subject;
+                        counts[originalSubjectName] = (counts[originalSubjectName] || 0) + 1;
                     }
                 }
-            }
+            });
             return counts;
         }
 
-        function renderSemester(semester, studentCounts) {
-            const maxStudents = parseInt(maxStudentsInput.value) || 27;
-            const cancelThreshold = parseInt(cancelThresholdInput.value) || 0;
+        function calculateClassCount(studentCount, standard, max) {
+            if (studentCount === 0) return 0;
+            if (!standard || !max) return 1;
+
+            let classes = Math.floor(studentCount / standard);
+            let remainder = studentCount % standard;
             
-            analysisResults[semester] = { offeredCourses: [] };
+            if (remainder > 0) {
+                if (remainder <= max - standard) {
+                    // Try to fit into existing classes
+                    let canFit = true;
+                    // This logic is complex, simplify for now.
+                    // If remainder exists, just add a class for now unless it can be perfectly divided
+                    if (studentCount / max > classes) {
+                         classes++;
+                    } else if (classes === 0) {
+                        classes = 1;
+                    } else {
+                         // A simple distribution logic
+                         let studentsPerClass = studentCount / classes;
+                         if (studentsPerClass > max) {
+                            classes++
+                         } else {
+                            // check if we can reduce classes
+                            let potentialClasses = classes;
+                            while(potentialClasses > 1) {
+                                if (studentCount / (potentialClasses-1) <= max) {
+                                    potentialClasses--;
+                                } else {
+                                    break;
+                                }
+                            }
+                            classes = potentialClasses;
+                         }
+                    }
 
-            // 1. School-Designated Subjects
-            const requiredContainer = document.getElementById(`s${semester}-required`);
-            const excludedSubjects = ['스포츠 생활1', '스포츠 생활2'];
-            const requiredCourses = combinedCourseData.filter(c => 
-                c.semester == semester && 
-                c.required &&
-                !excludedSubjects.includes(c.subjectName)
-            );
-            let requiredHtml = `<h2 class="text-2xl font-bold mb-4 flex items-center gap-x-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-indigo-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-                <span>학교 지정과목</span>
-            </h2><table class="w-full text-sm text-left">
-                <thead class="bg-gray-100"><tr>
-                    <th class="p-2 w-2/5">과목명</th><th>학년</th><th>학점</th><th>분반수</th>
-                </tr></thead><tbody>`;
-            requiredCourses.forEach(course => {
-                const classCount = 5;
-                requiredHtml += `<tr class="border-b">
-                    <td class="p-2">${course.subjectName}</td><td>${course.grade}</td><td>${course.credits}</td><td>${classCount}</td>
-                </tr>`;
-                analysisResults[semester].offeredCourses.push({ ...course, classCount, studentCount: 'N/A' });
+                } else {
+                    classes++;
+                }
+                 if(studentCount > standard && classes == 1){
+                     if(studentCount > max){
+                         classes = 2;
+                     }
+                 }
+
+            }
+
+             if (classes === 0 && studentCount > 0) classes = 1;
+
+            // Final check: if total students can be divided into fewer classes within max limit
+            if (classes > 1 && studentCount / (classes - 1) <= max) {
+                // This seems too aggressive, let's refine
+                let finalClasses = classes;
+                while (finalClasses > 1) {
+                    if (studentCount / (finalClasses-1) > max) {
+                       break;
+                    }
+                    finalClasses--;
+                }
+                return finalClasses;
+            }
+
+            return classes;
+        }
+
+
+        function renderSemester(semester, studentCounts) {
+            const cancelThreshold = parseInt(cancelThresholdInput.value) || 0;
+            const standardStudents = parseInt(standardStudentsInput.value) || 26;
+            const maxStudents = parseInt(maxStudentsInput.value) || 27;
+
+            const semesterCourses = combinedCourseData.filter(c => c.semester == semester);
+            
+            let offeredCourses = semesterCourses.map(course => {
+                const count = studentCounts[course.subjectName] || 0;
+                const isCancelled = !course.required && count < cancelThreshold;
+                const classCount = isCancelled ? 0 : (
+                    course.required ? 5 : calculateClassCount(count, standardStudents, maxStudents)
+                );
+                return { ...course, studentCount: count, classCount, isCancelled };
             });
-            requiredHtml += `</tbody></table>`;
-            requiredContainer.innerHTML = requiredHtml;
+            
+            analysisResults[semester] = { offeredCourses };
 
-            // 2. Student-Selected Subjects
+            renderRequiredSection(semester, offeredCourses);
+            renderElectiveSection(semester, offeredCourses);
+            renderAverageSection(semester, offeredCourses);
+        }
+
+        function renderRequiredSection(semester, offeredCourses) {
+            const requiredContainer = document.getElementById(`s${semester}-required`);
+            const requiredCourses = offeredCourses.filter(
+                c => c.required && c.subjectName !== '스포츠생활' && c.subjectName !== '스포츠 생활1' && c.subjectName !== '스포츠 생활2'
+            );
+
+            let html = `<h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                        학교 지정 과목
+                      </h2>`;
+            html += `<table class="w-full text-sm text-left">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="p-2 w-2/5">과목명</th>
+                                <th class="p-2 text-center">운영학년</th>
+                                <th class="p-2 text-center">학점</th>
+                                <th class="p-2 text-center">분반수</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+            requiredCourses.forEach(course => {
+                html += `<tr class="border-b">
+                            <td class="p-2">${course.subjectName}</td>
+                            <td class="p-2 text-center">${course.grade}</td>
+                            <td class="p-2 text-center">${course.credits}</td>
+                            <td class="p-2 text-center">${course.classCount}</td>
+                         </tr>`;
+            });
+            html += `</tbody></table>`;
+            requiredContainer.innerHTML = html;
+        }
+
+        function renderElectiveSection(semester, offeredCourses) {
             const electiveContainer = document.getElementById(`s${semester}-elective`);
-            const electiveCourses = combinedCourseData.filter(c => c.semester == semester && !c.required);
+            const electiveCourses = offeredCourses.filter(c => !c.required && !c.isCancelled && c.studentCount > 0);
+            
             const groupedBySubCategory = electiveCourses.reduce((acc, course) => {
                 const key = course.subCategory || '기타';
-                if (!acc[key]) acc[key] = [];
+                if (!acc[key]) {
+                    acc[key] = [];
+                }
                 acc[key].push(course);
                 return acc;
             }, {});
 
-            let electiveHtml = `<h2 class="text-2xl font-bold mb-4 flex items-center gap-x-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-teal-400 animate-pulse" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                </svg>
-                <span>학생 선택과목</span>
-            </h2>`;
-            for (const subCategory in groupedBySubCategory) {
-                electiveHtml += `<h3 class="text-lg font-semibold mt-4 mb-2 text-indigo-600">${subCategory}</h3>
-                <table class="w-full text-sm text-left">
-                    <thead class="bg-gray-100"><tr>
-                        <th class="p-2 w-2/5">과목명</th><th>학년</th><th>학점</th><th>선택인원</th><th>분반수</th>
-                    </tr></thead><tbody>`;
-                
-                let hasSubjectsInSubCategory = false;
+            let html = `<h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                            학생 선택 과목
+                        </h2>`;
+            
+            Object.keys(groupedBySubCategory).sort().forEach(subCategory => {
+                html += `<h3 class="text-md font-semibold mt-4 mb-2 text-gray-700">${subCategory}</h3>`;
+                html += `<table class="w-full text-sm text-left">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="p-2 w-2/5">과목명</th>
+                                    <th class="p-2 text-center">운영학년</th>
+                                    <th class="p-2 text-center">학점</th>
+                                    <th class="p-2 text-center">선택인원</th>
+                                    <th class="p-2 text-center">분반수</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
                 groupedBySubCategory[subCategory].forEach(course => {
-                    const studentCount = studentCounts[course.subjectName] || 0;
-                    if (studentCount > 0) {
-                        hasSubjectsInSubCategory = true;
-                        const isCancelled = studentCount < cancelThreshold;
-                        const classCount = isCancelled ? 0 : (Math.ceil(studentCount / maxStudents) || 0);
-                        
-                        electiveHtml += `<tr class="border-b ${isCancelled ? 'text-gray-400 italic' : ''}">
-                            <td class="p-2">${course.subjectName}</td><td>${course.grade}</td><td>${course.credits}</td><td>${studentCount}</td><td>${classCount}</td>
-                        </tr>`;
-                        
-                        if (!isCancelled) {
-                            analysisResults[semester].offeredCourses.push({ ...course, classCount, studentCount });
-                        }
-                    }
+                     html += `<tr class="border-b">
+                                <td class="p-2">${course.subjectName}</td>
+                                <td class="p-2 text-center">${course.grade}</td>
+                                <td class="p-2 text-center">${course.credits}</td>
+                                <td class="p-2 text-center">${course.studentCount}</td>
+                                <td class="p-2 text-center">${course.classCount}</td>
+                              </tr>`;
                 });
-                if (!hasSubjectsInSubCategory) {
-                    electiveHtml += `<tr><td colspan="5" class="p-4 text-center text-gray-500">선택한 학생이 없습니다.</td></tr>`;
-                }
-                electiveHtml += `</tbody></table>`;
-            }
-            electiveContainer.innerHTML = electiveHtml;
+                html += `</tbody></table>`;
+            });
 
-            // 3. Average Hours per Subject
-            renderAverageSection(semester, analysisResults[semester].offeredCourses);
+            electiveContainer.innerHTML = html;
         }
 
         function renderAverageSection(semester, offeredCourses) {
+            const wasInputFocused = document.activeElement && document.activeElement.classList.contains('avg-hour-input');
+            const activeElementId = wasInputFocused ? document.activeElement.id : null;
+
             const averageContainer = document.getElementById(`s${semester}-average`);
-            
-            // Focus Management: Store the ID of the currently focused input if it's within this section
-            const activeElement = document.activeElement;
-            const activeElementId = activeElement.id;
-            const wasInputFocused = activeElement.closest(`#s${semester}-average`) && activeElement.classList.contains('avg-hour-input');
+            const coursesWithHours = offeredCourses.filter(c => c.classCount > 0);
 
-            let averageHtml = `<h2 class="text-2xl font-bold mb-4 flex items-center gap-x-3">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-amber-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-                <span>교과별 평균 시수</span>
-            </h2>`;
-
-            // By Major
-            const byMajor = offeredCourses.reduce((acc, course) => {
-                if(course.major) {
-                    if (!acc[course.major]) acc[course.major] = { total: 0, courses: [] };
-                    acc[course.major].total += (course.classCount * course.credits);
+            const byMajor = coursesWithHours
+                .filter(c => c.major)
+                .reduce((acc, course) => {
+                    if (!acc[course.major]) {
+                        acc[course.major] = { totalHours: 0, courses: [] };
+                    }
+                    acc[course.major].totalHours += course.classCount * course.credits;
                     acc[course.major].courses.push(course);
+                    return acc;
+            }, {});
+
+            const bySubCategory = coursesWithHours.reduce((acc, course) => {
+                 const key = course.subCategory || '기타';
+                 if (!acc[key]) {
+                    acc[key] = { totalHours: 0, courses: [] };
                 }
+                acc[key].totalHours += course.classCount * course.credits;
+                acc[key].courses.push(course);
                 return acc;
             }, {});
+
+            let html = `<h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M12 8h.01M15 8h.01M15 14h.01M18 8a2 2 0 11-4 0 2 2 0 014 0zM9 4a2 2 0 11-4 0 2 2 0 014 0z" /> </svg>
+                        교과별 평균 시수
+                      </h2>`;
+            html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-8">`;
             
-            averageHtml += `<h3 class="text-lg font-semibold mt-4 mb-2 text-indigo-600">교사 전공별 평균시수</h3>
-                <table class="w-full text-sm text-left">
-                <thead class="bg-gray-100"><tr>
-                    <th class="p-2">전공</th><th>총 시수</th><th>교원수(정원외 포함)</th><th>평균시수</th>
-                </tr></thead><tbody>`;
-            
-            const majors = [...new Set(combinedCourseData.map(c => c.major).filter(Boolean))].sort();
-            majors.forEach(major => {
-                const totalHours = byMajor[major] ? byMajor[major].total : 0;
+            // By Major
+            let averageHtml = `<div><h3 class="font-semibold mb-2">교사 전공별 평균 시수</h3>`;
+            averageHtml += `<table class="w-full text-sm text-left">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="p-2">교사 전공</th>
+                                        <th class="p-2">총 시수</th>
+                                        <th class="p-2">교원수(정원외 포함)</th>
+                                        <th class="p-2">평균시수</th>
+                                    </tr>
+                                </thead>
+                            <tbody>`;
+            Object.keys(byMajor).sort().forEach(major => {
+                const { totalHours } = byMajor[major];
                 const calculationDetails = byMajor[major] ? byMajor[major].courses
                     .map(c => `${c.subjectName}(${c.classCount}*${c.credits})`)
                     .join(' + ') : '개설 과목 없음';
                 
                 const teacherCountId = `s${semester}_major_${major}_teachers`;
-                const teacherCountVal = document.getElementById(teacherCountId) ? document.getElementById(teacherCountId).value : '';
+                const teacherCountVal = teacherData[teacherCountId] || '';
                 const teachers = parseInt(teacherCountVal) || 0;
                 const average = teachers > 0 ? (totalHours / teachers).toFixed(1) : '0.0';
 
@@ -740,50 +877,43 @@
                     <td>${average}</td>
                 </tr>`;
             });
-            averageHtml += `</tbody></table>`;
-
-
-            // By SubCategory
-            const bySubCategory = offeredCourses.reduce((acc, course) => {
-                 const key = course.subCategory || '기타';
-                 if (!acc[key]) acc[key] = { total: 0, courses: [] };
-                 acc[key].total += (course.classCount * course.credits);
-                 acc[key].courses.push(course);
-                 return acc;
-            }, {});
-
-            averageHtml += `<h3 class="text-lg font-semibold mt-6 mb-2 text-indigo-600">교과별 평균시수</h3>
-                <table class="w-full text-sm text-left">
-                <thead class="bg-gray-100"><tr>
-                    <th class="p-2">교과</th>
-                    <th>교과총시수</th>
-                    <th>전문계 시수</th>
-                    <th>교원수(정원내)</th>
-                    <th>평균시수(정원내)</th>
-                    <th>교원수(정원 외 포함)</th>
-                    <th>평균시수(정원 외 포함)</th>
-                </tr></thead><tbody>`;
+            averageHtml += `</tbody></table></div>`;
             
-            const subCategories = [...new Set(combinedCourseData.map(c => c.subCategory).filter(Boolean))].sort();
-
-            subCategories.forEach(subCat => {
-                const totalHours = bySubCategory[subCat] ? bySubCategory[subCat].total : 0;
+            // By SubCategory
+            let subCatAverageHtml = `<div><h3 class="font-semibold mb-2">교과별 평균 시수</h3>`;
+            subCatAverageHtml += `<table class="w-full text-sm text-left">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="p-2">교과</th>
+                                        <th class="p-2">총 시수</th>
+                                        <th class="p-2">전문계 시수</th>
+                                        <th class="p-2">교원수(정원내)</th>
+                                        <th class="p-2">평균시수(정원내)</th>
+                                        <th class="p-2">교원수(정원 외 포함)</th>
+                                        <th class="p-2">평균시수(정원 외 포함)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+            
+             Object.keys(bySubCategory).sort().forEach(subCat => {
+                const { totalHours } = bySubCategory[subCat];
                  const calculationDetails = bySubCategory[subCat] ? bySubCategory[subCat].courses
                     .map(c => `${c.subjectName}(${c.classCount}*${c.credits})`)
                     .join(' + ') : '개설 과목 없음';
-
+                
                 const vocationalId = `s${semester}_subcat_${subCat}_voc`;
                 const teacherInId = `s${semester}_subcat_${subCat}_in`;
                 const teacherOutId = `s${semester}_subcat_${subCat}_out`;
 
-                const vocationalVal = document.getElementById(vocationalId) ? parseInt(document.getElementById(vocationalId).value) || 0 : 0;
-                const teachersInVal = document.getElementById(teacherInId) ? parseInt(document.getElementById(teacherInId).value) || 0 : 0;
-                const teachersOutVal = document.getElementById(teacherOutId) ? parseInt(document.getElementById(teacherOutId).value) || 0 : 0;
+                const vocationalVal = teacherData[vocationalId] || '';
+                const teachersInVal = teacherData[teacherInId] || '';
+                const teachersOutVal = teacherData[teacherOutId] || '';
                 
-                const avgIn = teachersInVal > 0 ? ((totalHours + vocationalVal) / teachersInVal).toFixed(1) : '0.0';
-                const avgOut = teachersOutVal > 0 ? ((totalHours + vocationalVal) / teachersOutVal).toFixed(1) : '0.0';
+                const totalWithVocational = totalHours + (parseInt(vocationalVal) || 0);
+                const avgIn = (parseInt(teachersInVal) || 0) > 0 ? (totalWithVocational / (parseInt(teachersInVal) || 1)).toFixed(1) : '0.0';
+                const avgOut = (parseInt(teachersOutVal) || 0) > 0 ? (totalWithVocational / (parseInt(teachersOutVal) || 1)).toFixed(1) : '0.0';
 
-                averageHtml += `<tr class="border-b">
+                subCatAverageHtml += `<tr class="border-b">
                     <td class="p-2">${subCat}</td>
                     <td class="relative tooltip-container">
                          <span class="font-bold underline cursor-pointer tooltip-trigger" onclick="toggleTooltip(event)">${totalHours}</span>
@@ -791,38 +921,44 @@
                             ${calculationDetails}
                         </div>
                     </td>
-                    <td><input type="number" id="${vocationalId}" value="${vocationalVal || ''}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
-                    <td><input type="number" id="${teacherInId}" value="${teachersInVal || ''}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
+                    <td><input type="number" id="${vocationalId}" value="${vocationalVal}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
+                    <td><input type="number" id="${teacherInId}" value="${teachersInVal}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
                     <td>${avgIn}</td>
-                    <td><input type="number" id="${teacherOutId}" value="${teachersOutVal || ''}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
+                    <td><input type="number" id="${teacherOutId}" value="${teachersOutVal}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
                     <td>${avgOut}</td>
                 </tr>`;
             });
 
-            averageHtml += `</tbody></table>`;
-            averageContainer.innerHTML = averageHtml;
+            subCatAverageHtml += `</tbody></table></div>`;
+
+            html += averageHtml + subCatAverageHtml + `</div>`;
+            averageContainer.innerHTML = html;
             
             // Re-attach listeners to new inputs
             averageContainer.querySelectorAll('.avg-hour-input').forEach(input => {
-                input.addEventListener('change', () => {
+                input.addEventListener('change', (e) => {
+                    // 1. Update the in-memory data store
+                    if (e.target.value) {
+                        teacherData[e.target.id] = e.target.value;
+                    } else {
+                        delete teacherData[e.target.id]; // Clean up if empty
+                    }
+                    // 2. Re-render this section with updated calculations
                     renderAverageSection(semester, analysisResults[semester].offeredCourses);
                 });
             });
 
             // Restore focus if it was lost
             if (wasInputFocused && activeElementId) {
-                const newElement = document.getElementById(activeElementId);
-                if (newElement) {
-                    newElement.focus();
-                    newElement.setSelectionRange(newElement.value.length, newElement.value.length);
+                const focusedElement = document.getElementById(activeElementId);
+                if (focusedElement) {
+                    focusedElement.focus();
+                    focusedElement.select();
                 }
             }
         }
-
     </script>
+
 </body>
 </html>
-
-
-
 
