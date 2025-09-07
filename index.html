@@ -732,9 +732,7 @@
 
         function renderRequiredSection(semester, offeredCourses) {
             const requiredContainer = document.getElementById(`s${semester}-required`);
-            const requiredCourses = offeredCourses.filter(
-                c => c.required && c.subjectName !== '스포츠생활' && c.subjectName !== '스포츠 생활1' && c.subjectName !== '스포츠 생활2'
-            );
+            const requiredCourses = offeredCourses.filter(c => c.required);
 
             let html = `<h2 class="text-xl font-bold mb-4 flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
@@ -764,7 +762,7 @@
 
         function renderElectiveSection(semester, offeredCourses) {
             const electiveContainer = document.getElementById(`s${semester}-elective`);
-            const electiveCourses = offeredCourses.filter(c => !c.required && !c.isCancelled && c.studentCount > 0);
+            const electiveCourses = offeredCourses.filter(c => !c.required && c.studentCount > 0);
             
             const groupedBySubCategory = electiveCourses.reduce((acc, course) => {
                 const key = course.subCategory || '기타';
@@ -797,12 +795,14 @@
                             </thead>
                             <tbody>`;
                 groupedBySubCategory[subCategory].forEach(course => {
-                     html += `<tr class="border-b">
+                     const rowClass = course.isCancelled ? 'text-gray-400 italic' : '';
+                     const classCountDisplay = course.isCancelled ? '폐강' : course.classCount;
+                     html += `<tr class="border-b ${rowClass}">
                                 <td class="p-2">${course.subjectName}</td>
                                 <td class="p-2 text-center">${course.grade}</td>
                                 <td class="p-2 text-center">${course.credits}</td>
                                 <td class="p-2 text-center">${course.studentCount}</td>
-                                <td class="p-2 text-center">${course.classCount}</td>
+                                <td class="p-2 text-center">${classCountDisplay}</td>
                               </tr>`;
                 });
                 html += `</tbody></table>`;
@@ -845,10 +845,10 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M12 8h.01M15 8h.01M15 14h.01M18 8a2 2 0 11-4 0 2 2 0 014 0zM9 4a2 2 0 11-4 0 2 2 0 014 0z" /> </svg>
                         교과별 평균 시수
                       </h2>`;
-            html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-8">`;
+            html += `<div class="grid grid-cols-1 lg:grid-cols-5 gap-8">`;
             
             // By Major
-            let averageHtml = `<div><h3 class="font-semibold mb-2">교사 전공별 평균 시수</h3>`;
+            let averageHtml = `<div class="lg:col-span-2"><h3 class="font-semibold mb-2">교사 전공별 평균 시수</h3>`;
             averageHtml += `<table class="w-full text-sm text-left">
                                 <thead class="bg-gray-100">
                                     <tr>
@@ -878,14 +878,14 @@
                             ${calculationDetails}
                         </div>
                     </td>
-                    <td><input type="number" id="${teacherCountId}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" value="${teacherCountVal}" placeholder="0"></td>
+                    <td><input type="number" id="${teacherCountId}" class="avg-hour-input w-14 p-1 rounded border-gray-300 text-center bg-gray-50" value="${teacherCountVal}" placeholder="0"></td>
                     <td>${average}</td>
                 </tr>`;
             });
             averageHtml += `</tbody></table></div>`;
             
             // By SubCategory
-            let subCatAverageHtml = `<div><h3 class="font-semibold mb-2">교과별 평균 시수</h3>`;
+            let subCatAverageHtml = `<div class="lg:col-span-3"><h3 class="font-semibold mb-2">교과별 평균 시수</h3>`;
             subCatAverageHtml += `<table class="w-full text-sm text-left">
                                 <thead class="bg-gray-100">
                                     <tr>
