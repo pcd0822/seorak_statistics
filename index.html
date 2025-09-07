@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026학년도 설악고 시수 통계</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', 'Inter', sans-serif;
+        }
+        .animated-gradient {
+            background: linear-gradient(-45deg, #e0c3fc, #8ec5fc, #f0abfc, #8ed6fc);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+        }
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .tab-button {
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+        }
+        .tab-button.active {
+            border-color: #8ec5fc;
+            background-color: #e0c3fc;
+            color: white;
+        }
+        .section-grid {
+            display: grid;
+            grid-template-columns: repeat(1, 1fr);
+            gap: 1.5rem;
+        }
+        @media (min-width: 1280px) {
+            .section-grid {
+                grid-template-columns: 1fr 1.5fr 1.5fr;
+            }
+        }
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        .tooltip-container {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip-content {
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip-container .tooltip-content.show {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        
+        <!-- Header Section -->
+        <header class="text-center p-8 mb-8 rounded-xl shadow-lg animated-gradient">
+            <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">2026학년도 설악고 시수 통계</h1>
+            <p class="text-white/80 mt-2 text-lg">과목 선택 데이터를 기반으로 시수를 분석합니다.</p>
+        </header>
+
+        <p class="text-right text-sm text-gray-500 -mt-6 mb-8 pr-2">제작자: 설악고 박찬들</p>
+
+        <!-- Control Panel Section -->
+        <section class="bg-white p-6 rounded-xl shadow-md mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
+                <!-- Input Settings -->
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label for="maxStudents" class="block text-sm font-medium text-gray-600">학급 최대 인원</label>
+                        <input type="number" id="maxStudents" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="예: 27">
+                    </div>
+                    <div>
+                        <label for="standardStudents" class="block text-sm font-medium text-gray-600">학급 기준 인원</label>
+                        <input type="number" id="standardStudents" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="예: 26">
+                    </div>
+                    <div>
+                        <label for="cancelThreshold" class="block text-sm font-medium text-gray-600">폐강 기준 인원</label>
+                        <input type="number" id="cancelThreshold" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="예: 13">
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button id="downloadTemplateBtn" class="w-full text-center bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 shadow-sm">
+                        자료 입력 양식
+                    </button>
+                    <label for="upload" class="w-full cursor-pointer bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 shadow-sm text-center">
+                        자료 업로드
+                        <input type="file" id="upload" class="hidden" accept=".xlsx, .xls">
+                    </label>
+                </div>
+
+                <!-- Analysis Button -->
+                <button id="analyzeBtn" class="w-full bg-gray-400 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed transition duration-300 shadow-sm" disabled>
+                    분석하기
+                </button>
+            </div>
+             <p id="uploadStatus" class="text-sm text-gray-500 mt-4 text-center"></p>
+        </section>
+
+        <!-- Tabs -->
+        <div class="mb-8">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                    <button id="tab1" class="tab-button active whitespace-nowrap py-2 px-6 border-b-2 font-medium text-lg border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        1학기
+                    </button>
+                    <button id="tab2" class="tab-button whitespace-nowrap py-2 px-6 border-b-2 font-medium text-lg border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        2학기
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Content Area -->
+        <main id="contentArea" class="hidden">
+            <!-- Semester 1 Content -->
+            <div id="content1" class="tab-content">
+                <div class="grid grid-cols-1 xl:grid-cols-5 gap-6 mb-6">
+                    <section id="s1-required" class="xl:col-span-2 bg-white p-6 rounded-xl shadow-md"></section>
+                    <section id="s1-elective" class="xl:col-span-3 bg-white p-6 rounded-xl shadow-md"></section>
+                </div>
+                <section id="s1-average" class="bg-white p-6 rounded-xl shadow-md"></section>
+            </div>
+            <!-- Semester 2 Content -->
+            <div id="content2" class="tab-content hidden">
+                 <div class="grid grid-cols-1 xl:grid-cols-5 gap-6 mb-6">
+                    <section id="s2-required" class="xl:col-span-2 bg-white p-6 rounded-xl shadow-md"></section>
+                    <section id="s2-elective" class="xl:col-span-3 bg-white p-6 rounded-xl shadow-md"></section>
+                </div>
+                <section id="s2-average" class="bg-white p-6 rounded-xl shadow-md"></section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- DATA CONSTANTS ---
+        const RAW_CMS_DATA = [
+            {"subjectName": "공통국어1", "slug": "gongtonggwamog", "grade": "1", "semester": "1"},
+            {"subjectName": "공통국어2", "slug": "gongtonggugeo2", "grade": "1", "semester": "2"},
+            {"subjectName": "공통수학1", "slug": "gongtongsuhag1", "grade": "1", "semester": "1"},
+            {"subjectName": "공통수학2", "slug": "gongtongsuhag2", "grade": "1", "semester": "2"},
+            {"subjectName": "공통영어1", "slug": "gongtongyeongeo1", "grade": "1", "semester": "1"},
+            {"subjectName": "공통영어2", "slug": "gongtongyeongeo2", "grade": "1", "semester": "2"},
+            {"subjectName": "통합사회1", "slug": "tonghabsahoe1", "grade": "1", "semester": "1"},
+            {"subjectName": "통합사회2", "slug": "tonghabsahoe2", "grade": "1", "semester": "2"},
+            {"subjectName": "통합과학1", "slug": "tonghabgwahag1", "grade": "1", "semester": "1"},
+            {"subjectName": "통합과학2", "slug": "tonghabgwahag2", "grade": "1", "semester": "2"},
+            {"subjectName": "한국사1", "slug": "hangugsa1", "grade": "1", "semester": "1"},
+            {"subjectName": "한국사2", "slug": "hangugsa2", "grade": "1", "semester": "2"},
+            {"subjectName": "과학탐구실험1", "slug": "gwahagtamgusilheom1", "grade": "1", "semester": "1"},
+            {"subjectName": "과학탐구실험2", "slug": "gwahagtamgusilheom2", "grade": "1", "semester": "2"},
+            {"subjectName": "체육1", "slug": "ceyug1", "grade": "1", "semester": "1"},
+            {"subjectName": "체육2", "slug": "ceyug2", "grade": "1", "semester": "2"},
+            {"subjectName": "음악", "slug": "eumag", "grade": "1", "semester": "1"},
+            {"subjectName": "미술", "slug": "misul", "grade": "1", "semester": "2"},
+            {"subjectName": "문학", "slug": "munhag-f72be", "grade": "2", "semester": "1"},
+            {"subjectName": "독서와 작문", "slug": "dokseowajakmun", "grade": "2", "semester": "2"},
+            {"subjectName": "대수", "slug": "daesoo", "grade": "2", "semester": "1"},
+            {"subjectName": "미적분I", "slug": "mijeogbuni", "grade": "2", "semester": "2"},
+            {"subjectName": "영어I", "slug": "yeongeoi", "grade": "2", "semester": "1"},
+            {"subjectName": "영어 독해와 작문", "slug": "yeongeodokhaewajakmun", "grade": "2", "semester": "2"},
+            {"subjectName": "스포츠 문화", "slug": "sportsmunhwa", "grade": "2", "semester": "1"},
+            {"subjectName": "스포츠 과학", "slug": "sportsgwahak", "grade": "2", "semester": "2"},
+            {"subjectName": "주제 탐구 독서", "slug": "jujetamgudokseo", "grade": "2", "semester": "1"},
+            {"subjectName": "인공지능 수학", "slug": "ingongjineungsuhak", "grade": "2", "semester": "1"},
+            {"subjectName": "세계 문화와 영어", "slug": "segyemunhwawayeongeo", "grade": "2", "semester": "1"},
+            {"subjectName": "물리학", "slug": "mulrihag", "grade": "2", "semester": "1"},
+            {"subjectName": "화학", "slug": "hwahag", "grade": "2", "semester": "1"},
+            {"subjectName": "생명과학", "slug": "saengmyeonggwahag", "grade": "2", "semester": "1"},
+            {"subjectName": "지구과학", "slug": "jigugwahag", "grade": "2", "semester": "1"},
+            {"subjectName": "세계사", "slug": "segyesa", "grade": "2", "semester": "1"},
+            {"subjectName": "세계시민과 지리", "slug": "segyesimingwajiri", "grade": "2", "semester": "1"},
+            {"subjectName": "법과 사회", "slug": "beopgwasahoe", "grade": "2", "semester": "1"},
+            {"subjectName": "인문학과 윤리", "slug": "inmunhakgwayunri", "grade": "2", "semester": "1"},
+            {"subjectName": "일본어", "slug": "ilboneo", "grade": "2", "semester": "1"},
+            {"subjectName": "중국어", "slug": "junggugeo", "grade": "2", "semester": "1"},
+            {"subjectName": "한문", "slug": "hanmun", "grade": "2", "semester": "1"},
+            {"subjectName": "미술창작", "slug": "misulchangjak", "grade": "2", "semester": "1"},
+            {"subjectName": "문학과 영상", "slug": "munhakgwayeongsang", "grade": "2", "semester": "2"},
+            {"subjectName": "언어생활 탐구", "slug": "eoneosaenghwaltamgu", "grade": "2", "semester": "2"},
+            {"subjectName": "기하", "slug": "giha", "grade": "2", "semester": "2"},
+            {"subjectName": "미디어 영어", "slug": "midieoyeongeo", "grade": "2", "semester": "2"},
+            {"subjectName": "사회와 문화", "slug": "sahoewamunhwa", "grade": "2", "semester": "2"},
+            {"subjectName": "현대사회와 윤리", "slug": "hyeondaesahoewayunri", "grade": "2", "semester": "2"},
+            {"subjectName": "도시의 미래 탐구", "slug": "hyeondaesadosiuimiraetamguhoewayunri", "grade": "2", "semester": "2"},
+            {"subjectName": "동아시아 역사 기행", "slug": "dongasiayeoksagihaeng", "grade": "2", "semester": "2"},
+            {"subjectName": "역학과 에너지", "slug": "yeoghaggwa-eneoji", "grade": "2", "semester": "2"},
+            {"subjectName": "물질과 에너지", "slug": "muljilgwa-eneoji", "grade": "2", "semester": "2"},
+            {"subjectName": "세포와 물질대사", "slug": "sepowa-muljildaesa", "grade": "2", "semester": "2"},
+            {"subjectName": "지구시스템과학", "slug": "jigusiseutemgwahag", "grade": "2", "semester": "2"},
+            {"subjectName": "음악 감상과 비평", "slug": "eumakgamsanggwabipyeong", "grade": "2", "semester": "2"},
+            {"subjectName": "정보", "slug": "jeongbo", "grade": "2", "semester": "2"},
+            {"subjectName": "인간과 심리", "slug": "ingangwa-simri", "grade": "2", "semester": "2"},
+            {"subjectName": "화법과 언어", "slug": "hwabeopgwaeoneo", "grade": "3", "semester": "1"},
+            {"subjectName": "독서 토론과 글쓰기", "slug": "dokseotorongwa-geulssgi", "grade": "3", "semester": "1"},
+            {"subjectName": "미적분II", "slug": "mijeogbunii", "grade": "3", "semester": "1"},
+            {"subjectName": "확률과 통계", "slug": "hwagryulgwa-tonggye", "grade": "3", "semester": "1"},
+            {"subjectName": "경제수학", "slug": "gyeongjesuhak", "grade": "3", "semester": "1"},
+            {"subjectName": "영어 발표와 토론", "slug": "yeongeobalpyowatoron", "grade": "3", "semester": "1"},
+            {"subjectName": "영어II", "slug": "yeongeoii", "grade": "3", "semester": "1"},
+            {"subjectName": "정치", "slug": "jeongchi", "grade": "3", "semester": "1"},
+            {"subjectName": "한국지리 탐구", "slug": "hangukjiritamgu", "grade": "3", "semester": "1"},
+            {"subjectName": "윤리와 사상", "slug": "yunriwasasang", "grade": "3", "semester": "1"},
+            {"subjectName": "역사로 탐구하는 현대 세계", "slug": "yeoksaro-tamguhaneun-hyeondaesegye", "grade": "3", "semester": "1"},
+            {"subjectName": "전자기와 양자", "slug": "jeonjagiwa-yangja", "grade": "3", "semester": "1"},
+            {"subjectName": "화학 반응의 세계", "slug": "hwahag-baneungyi-segye", "grade": "3", "semester": "1"},
+            {"subjectName": "생물의 유전", "slug": "saengmulyi-yujeon", "grade": "3", "semester": "1"},
+            {"subjectName": "행성우주과학", "slug": "haengseongujugwahag", "grade": "3", "semester": "1"},
+            {"subjectName": "미술과 매체", "slug": "misulgwa-maeche", "grade": "3", "semester": "1"},
+            {"subjectName": "데이터 과학", "slug": "deiteogwahak", "grade": "3", "semester": "1"},
+            {"subjectName": "교육의 이해", "slug": "gyoyuguiihae", "grade": "3", "semester": "1"},
+            {"subjectName": "보건", "slug": "bogeon", "grade": "3", "semester": "1"},
+            {"subjectName": "마케팅과 광고", "slug": "maketinggwagwanggo", "grade": "3", "semester": "1"},
+            {"subjectName": "매체 의사소통", "slug": "maecheuisasotong", "grade": "3", "semester": "2"},
+            {"subjectName": "수학과 문화", "slug": "suhakgwamunhwa", "grade": "3", "semester": "2"},
+            {"subjectName": "실생활 영어 회화", "slug": "silsaenghwal-yeongeo-hoehwa", "grade": "3", "semester": "2"},
+            {"subjectName": "사회문제 탐구", "slug": "sahoemunjetamgu", "grade": "3", "semester": "2"},
+            {"subjectName": "여행지리", "slug": "yeohaengjiri", "grade": "3", "semester": "2"},
+            {"subjectName": "윤리문제 탐구", "slug": "yunrimunjetamgu", "grade": "3", "semester": "2"},
+            {"subjectName": "음악과 미디어", "slug": "eumakgwa-midieo", "grade": "3", "semester": "2"},
+            {"subjectName": "생태와 환경", "slug": "saengtaewa-hwangyeong", "grade": "3", "semester": "2"},
+            {"subjectName": "인간과 철학", "slug": "ingangwa-cheolhak", "grade": "3", "semester": "2"},
+            {"subjectName": "인간과 경제활동", "slug": "ingangwa-gyeongjehwaldong", "grade": "3", "semester": "2"},
+            {"subjectName": "직무 의사소통", "slug": "jikmuisasotong", "grade": "3", "semester": "2"},
+            {"subjectName": "직무 영어", "slug": "jikmuyeongeo", "grade": "3", "semester": "2"},
+            {"subjectName": "직무 수학", "slug": "jikmusuhak", "grade": "3", "semester": "2"},
+            {"subjectName": "기후변화와 환경생태", "slug": "gihubyeonhwawa-hwangyeongsaengtae", "grade": "3", "semester": "2"},
+            {"subjectName": "과학의 역사와 문화", "slug": "gwahagui-yeoksawa-munhwa", "grade": "3", "semester": "2"},
+            {"subjectName": "스포츠생활", "slug": "sportssaenghwal", "grade": "3", "semester": "1"},
+            {"subjectName": "스포츠생활", "slug": "sportssaenghwal", "grade": "3", "semester": "2"},
+            {"subjectName": "언어와매체", "slug": "eoneowamaeche", "grade": "3", "semester": "1"},
+            {"subjectName": "언어와매체", "slug": "eoneowamaeche", "grade": "3", "semester": "2"},
+            {"subjectName": "화법과작문", "slug": "hwabeopgwajakmun", "grade": "3", "semester": "1"},
+            {"subjectName": "화법과작문", "slug": "hwabeopgwajakmun", "grade": "3", "semester": "2"},
+            {"subjectName": "확률과통계", "slug": "hwagryulgwa-tonggye-3", "grade": "3", "semester": "1"},
+            {"subjectName": "확률과통계", "slug": "hwagryulgwa-tonggye-3", "grade": "3", "semester": "2"},
+            {"subjectName": "미적분", "slug": "mijeogbun", "grade": "3", "semester": "1"},
+            {"subjectName": "미적분", "slug": "mijeogbun", "grade": "3", "semester": "2"},
+            {"subjectName": "영어독해와작문", "slug": "yeongeodokhaewajakmun-3", "grade": "3", "semester": "1"},
+            {"subjectName": "영어독해와작문", "slug": "yeongeodokhaewajakmun-3", "grade": "3", "semester": "2"},
+            {"subjectName": "영어회화", "slug": "yeongeohoehwa", "grade": "3", "semester": "1"},
+            {"subjectName": "영어회화", "slug": "yeongeohoehwa", "grade": "3", "semester": "2"},
+            {"subjectName": "한국지리", "slug": "hangukjiri", "grade": "3", "semester": "1"},
+            {"subjectName": "한국지리", "slug": "hangukjiri", "grade": "3", "semester": "2"},
+            {"subjectName": "동아시아사", "slug": "dongasiasa", "grade": "3", "semester": "1"},
+            {"subjectName": "동아시아사", "slug": "dongasiasa", "grade": "3", "semester": "2"},
+            {"subjectName": "정치와법", "slug": "jeongchiwabeop", "grade": "3", "semester": "1"},
+            {"subjectName": "정치와법", "slug": "jeongchiwabeop", "grade": "3", "semester": "2"},
+            {"subjectName": "윤리와사상", "slug": "yunriwasasang-3", "grade": "3", "semester": "1"},
+            {"subjectName": "윤리와사상", "slug": "yunriwasasang-3", "grade": "3", "semester": "2"},
+            {"subjectName": "물리학II", "slug": "mulrihagii", "grade": "3", "semester": "1"},
+            {"subjectName": "물리학II", "slug": "mulrihagii", "grade": "3", "semester": "2"},
+            {"subjectName": "화학II", "slug": "hwahagii", "grade": "3", "semester": "1"},
+            {"subjectName": "화학II", "slug": "hwahagii", "grade": "3", "semester": "2"},
+            {"subjectName": "생명과학II", "slug": "saengmyeonggwahagii", "grade": "3", "semester": "1"},
+            {"subjectName": "생명과학II", "slug": "saengmyeonggwahagii", "grade": "3", "semester": "2"},
+            {"subjectName": "지구과학II", "slug": "jigugwahagii", "grade": "3", "semester": "1"},
+            {"subjectName": "지구과학II", "slug": "jigugwahagii", "grade": "3", "semester": "2"},
+            {"subjectName": "세계문제미래사회", "slug": "segye-munje-miraesahoe", "grade": "3", "semester": "1"},
+            {"subjectName": "세계문제와 미래사회", "slug": "segye-munje-miraesahoe", "grade": "3", "semester": "2"},
+            {"subjectName": "여행지리", "slug": "yeohaengjiri-1", "grade": "3", "semester": "1"},
+            {"subjectName": "여행지리", "slug": "yeohaengjiri-1", "grade": "3", "semester": "2"},
+            {"subjectName": "생활과과학", "slug": "saenghwalgwahak", "grade": "3", "semester": "1"},
+            {"subjectName": "생활과과학", "slug": "saenghwalgwahak", "grade": "3", "semester": "2"},
+            {"subjectName": "마케팅과광고", "slug": "maketinggwagwanggo-1", "grade": "3", "semester": "1"},
+            {"subjectName": "마케팅과광고", "slug": "maketinggwagwanggo-1", "grade": "3", "semester": "2"},
+            {"subjectName": "체육전공실기기초", "slug": "ceyugjeongongsilgigicho", "grade": "3", "semester": "1"},
+            {"subjectName": "체육전공실기기초", "slug": "ceyugjeongongsilgigicho", "grade": "3", "semester": "2"},
+            {"subjectName": "미디어컨텐츠일반", "slug": "midieokeontecheuilban", "grade": "3", "semester": "1"},
+            {"subjectName": "미디어컨텐츠일반", "slug": "midieokeontecheuilban", "grade": "3", "semester": "2"},
+            {"subjectName": "음악감상과비평", "slug": "eumakgamsanggwabipyeong-1", "grade": "3", "semester": "1"},
+            {"subjectName": "음악감상과비평", "slug": "eumakgamsanggwabipyeong-1", "grade": "3", "semester": "2"},
+            {"subjectName": "미술감상과비평", "slug": "misulgamsanggwabipyeong-1", "grade": "3", "semester": "1"},
+            {"subjectName": "미술감상과비평", "slug": "misulgamsanggwabipyeong-1", "grade": "3", "semester": "2"},
+            {"subjectName": "심리학", "slug": "simrihak", "grade": "3", "semester": "1"},
+            {"subjectName": "심리학", "slug": "simrihak", "grade": "3", "semester": "2"},
+            {"subjectName": "교육학", "slug": "gyoyughak", "grade": "3", "semester": "1"},
+            {"subjectName": "교육학", "slug": "gyoyughak", "grade": "3", "semester": "2"},
+            {"subjectName": "종교학", "slug": "jonggyohak", "grade": "3", "semester": "1"},
+            {"subjectName": "종교학", "slug": "jonggyohak", "grade": "3", "semester": "2"},
+            {"subjectName": "환경", "slug": "hwangyeong", "grade": "3", "semester": "1"},
+            {"subjectName": "환경", "slug": "hwangyeong", "grade": "3", "semester": "2"},
+        ];
+        const COURSE_DETAILS = {
+            'gongtonggwamog': { credits: 4, category: '기초교과', subCategory: '국어', required: true, offered: true, major: '국어' },
+            'gongtonggugeo2': { credits: 4, category: '기초교과', subCategory: '국어', required: true, offered: true, major: '국어' },
+            'gongtongsuhag1': { credits: 4, category: '기초교과', subCategory: '수학', required: true, offered: true, major: '수학' },
+            'gongtongsuhag2': { credits: 4, category: '기초교과', subCategory: '수학', required: true, offered: true, major: '수학' },
+            'gongtongyeongeo1': { credits: 4, category: '기초교과', subCategory: '영어', required: true, offered: true, major: '영어' },
+            'gongtongyeongeo2': { credits: 4, category: '기초교과', subCategory: '영어', required: true, offered: true, major: '영어' },
+            'tonghabsahoe1': { credits: 4, category: '탐구교과', subCategory: '사회', required: true, offered: true, major: null },
+            'tonghabsahoe2': { credits: 4, category: '탐구교과', subCategory: '사회', required: true, offered: true, major: null },
+            'tonghabgwahag1': { credits: 4, category: '탐구교과', subCategory: '과학', required: true, offered: true, major: null },
+            'tonghabgwahag2': { credits: 4, category: '탐구교과', subCategory: '과학', required: true, offered: true, major: null },
+            'hangugsa1': { credits: 3, category: '기초교과', subCategory: '사회', required: true, offered: true, major: '역사' },
+            'hangugsa2': { credits: 3, category: '기초교과', subCategory: '사회', required: true, offered: true, major: '역사' },
+            'gwahagtamgusilheom1': { credits: 1, category: '탐구교과', subCategory: '과학', required: true, offered: true, major: null },
+            'gwahagtamgusilheom2': { credits: 1, category: '탐구교과', subCategory: '과학', required: true, offered: true, major: null },
+            'ceyug1': { credits: 2, category: '체육교과', subCategory: '체육', required: true, offered: true, major: '체육' },
+            'ceyug2': { credits: 2, category: '체육교과', subCategory: '체육', required: true, offered: true, major: '체육' },
+            'eumag': { credits: 3, category: '예술교과', subCategory: '예술', required: true, offered: true, major: '음악' },
+            'misul': { credits: 3, category: '예술교과', subCategory: '예술', required: true, offered: true, major: '미술' },
+            'munhag-f72be': { credits: 4, category: '기초교과', subCategory: '국어', required: true, offered: true, major: '국어' },
+            'dokseowajakmun': { credits: 4, category: '기초교과', subCategory: '국어', required: true, offered: true, major: '국어' },
+            'daesoo': { credits: 4, category: '기초교과', subCategory: '수학', required: true, offered: true, major: '수학' },
+            'mijeogbuni': { credits: 4, category: '기초교과', subCategory: '수학', required: true, offered: true, major: '수학' },
+            'yeongeoi': { credits: 4, category: '기초교과', subCategory: '영어', required: true, offered: true, major: '영어' },
+            'yeongeodokhaewajakmun': { credits: 4, category: '기초교과', subCategory: '영어', required: true, offered: true, major: '영어' },
+            'sportsmunhwa': { credits: 1, category: '체육교과', subCategory: '체육', required: true, offered: true, major: '체육' },
+            'sportsgwahak': { credits: 1, category: '체육교과', subCategory: '체육', required: true, offered: true, major: '체육' },
+            'jujetamgudokseo': { credits: 4, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'ingongjineungsuhak': { credits: 4, category: '기초교과', subCategory: '수학', required: false, offered: true, major: '수학' },
+            'segyemunhwawayeongeo': { credits: 4, category: '기초교과', subCategory: '영어', required: false, offered: true, major: '영어' },
+            'mulrihag': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: '물리' },
+            'hwahag': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: '화학' },
+            'saengmyeonggwahag': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: '생명과학' },
+            'jigugwahag': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: '지구과학' },
+            'segyesa': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '역사' },
+            'segyesimingwajiri': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '지리' },
+            'beopgwasahoe': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '일반사회' },
+            'inmunhakgwayunri': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '윤리' },
+            'ilboneo': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: '일본어' },
+            'junggugeo': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: '중국어' },
+            'hanmun': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: '한문' },
+            'misulchangjak': { credits: 4, category: '예술교과', subCategory: '예술', required: false, offered: true, major: '미술' },
+            'munhakgwayeongsang': { credits: 4, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'eoneosaenghwaltamgu': { credits: 4, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'giha': { credits: 4, category: '기초교과', subCategory: '수학', required: false, offered: true, major: '수학' },
+            'midieoyeongeo': { credits: 4, category: '기초교과', subCategory: '영어', required: false, offered: true, major: '영어' },
+            'sahoewamunhwa': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '일반사회' },
+            'hyeondaesahoewayunri': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '윤리' },
+            'hyeondaesadosiuimiraetamguhoewayunri': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '지리' },
+            'dongasiayeoksagihaeng': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '역사' },
+            'yeoghaggwa-eneoji': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, prerequisites: ['mulrihag'], major: '물리' },
+            'muljilgwa-eneoji': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, prerequisites: ['hwahag'], major: '화학' },
+            'sepowa-muljildaesa': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, prerequisites: ['saengmyeonggwahag'], major: '생명과학' },
+            'jigusiseutemgwahag': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, prerequisites: ['jigugwahag'], major: '지구과학' },
+            'eumakgamsanggwabipyeong': { credits: 4, category: '예술교과', subCategory: '예술', required: false, offered: true, major: '음악' },
+            'jeongbo': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: '정보' },
+            'ingangwa-simri': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'hwabeopgwaeoneo': { credits: 4, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'dokseotorongwa-geulssgi': { credits: 4, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'mijeogbunii': { credits: 4, category: '기초교과', subCategory: '수학', required: false, offered: true, prerequisites: ['mijeogbuni'], major: '수학' },
+            'hwagryulgwa-tonggye': { credits: 4, category: '기초교과', subCategory: '수학', required: false, offered: true, major: '수학' },
+            'gyeongjesuhak': { credits: 4, category: '기초교과', subCategory: '수학', required: false, offered: true, major: '수학' },
+            'yeongeobalpyowatoron': { credits: 4, category: '기초교과', subCategory: '영어', required: false, offered: true, major: '영어' },
+            'yeongeoii': { credits: 4, category: '기초교과', subCategory: '영어', required: false, offered: true, major: '영어' },
+            'jeongchi': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '일반사회' },
+            'hangukjiritamgu': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '지리' },
+            'yunriwasasang': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '윤리' },
+            'yeoksaro-tamguhaneun-hyeondaesegye': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '역사' },
+            'jeonjagiwa-yangja': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, prerequisites: ['mulrihag'], major: '물리' },
+            'hwahag-baneungyi-segye': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, prerequisites: ['hwahag'], major: '화학' },
+            'saengmulyi-yujeon': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, prerequisites: ['saengmyeonggwahag'], major: '생명과학' },
+            'haengseongujugwahag': { credits: 4, category: '탐구교과', subCategory: '과학', required: false, offered: true, prerequisites: ['jigugwahag'], major: '지구과학' },
+            'misulgwa-maeche': { credits: 4, category: '예술교과', subCategory: '예술', required: false, offered: true, major: '미술' },
+            'deiteogwahak': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'gyoyuguiihae': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'bogeon': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: '보건' },
+            'maketinggwagwanggo': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'maecheuisasotong': { credits: 4, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'suhakgwamunhwa': { credits: 4, category: '기초교과', subCategory: '수학', required: false, offered: true, major: '수학' },
+            'silsaenghwal-yeongeo-hoehwa': { credits: 4, category: '기초교과', subCategory: '영어', required: false, offered: true, major: '영어' },
+            'sahoemunjetamgu': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '일반사회' },
+            'yeohaengjiri': { credits: 4, 'category': '탐구교과', subCategory: '사회', required: false, offered: true, major: '지리' },
+            'yunrimunjetamgu': { credits: 4, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '윤리' },
+            'eumakgwa-midieo': { credits: 4, category: '예술교과', subCategory: '예술', required: false, offered: true, major: '음악' },
+            'saengtaewa-hwangyeong': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'ingangwa-cheolhak': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'ingangwa-gyeongjehwaldong': { credits: 4, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'jikmuisasotong': { credits: 3, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'jikmuyeongeo': { credits: 3, category: '기초교과', subCategory: '영어', required: false, offered: true, major: '영어' },
+            'jikmusuhak': { credits: 3, category: '기초교과', subCategory: '수학', required: false, offered: true, major: '수학' },
+            'gihubyeonhwawa-hwangyeongsaengtae': { credits: 3, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: null },
+            'gwahagui-yeoksawa-munhwa': { credits: 3, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: null },
+            'sportssaenghwal': { credits: 1, category: '체육교과', subCategory: '체육', required: true, offered: true, major: '체육' },
+            'eoneowamaeche': { credits: 3, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'hwabeopgwajakmun': { credits: 3, category: '기초교과', subCategory: '국어', required: false, offered: true, major: '국어' },
+            'hwagryulgwa-tonggye-3': { credits: 3, category: '기초교과', subCategory: '수학', required: false, offered: true, major: '수학' },
+            'mijeogbun': { credits: 3, category: '기초교과', subCategory: '수학', required: false, offered: true, major: '수학' },
+            'yeongeodokhaewajakmun-3': { credits: 3, category: '기초교과', subCategory: '영어', required: false, offered: true, major: '영어' },
+            'yeongeohoehwa': { credits: 3, category: '기초교과', subCategory: '영어', required: false, offered: true, major: '영어' },
+            'hangukjiri': { credits: 3, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '지리' },
+            'dongasiasa': { credits: 3, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '역사' },
+            'jeongchiwabeop': { credits: 3, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '일반사회' },
+            'yunriwasasang-3': { credits: 3, category: '탐구교과', subCategory: '사회', required: false, offered: true, major: '윤리' },
+            'mulrihagii': { credits: 3, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: '물리' },
+            'hwahagii': { credits: 3, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: '화학' },
+            'saengmyeonggwahagii': { credits: 3, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: '생명과학' },
+            'jigugwahagii': { credits: 3, category: '탐구교과', subCategory: '과학', required: false, offered: true, major: '지구과학' },
+            'segye-munje-miraesahoe': { credits: 1, category: '생활교양교과', subCategory: '사회', required: false, offered: true, major: '일반사회' },
+            'yeohaengjiri-1': { credits: 1, category: '생활교양교과', subCategory: '사회', required: false, offered: true, major: '지리' },
+            'saenghwalgwahak': { credits: 1, category: '생활교양교과', subCategory: '과학', required: false, offered: true, major: null },
+            'maketinggwagwanggo-1': { credits: 1, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'ceyugjeongongsilgigicho': { credits: 1, category: '체육교과', subCategory: '체육', required: false, offered: true, major: '체육' },
+            'midieokeontecheuilban': { credits: 1, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'eumakgamsanggwabipyeong-1': { credits: 1, category: '예술교과', subCategory: '예술', required: false, offered: true, major: '음악' },
+            'misulgamsanggwabipyeong-1': { credits: 1, category: '예술교과', subCategory: '예술', required: false, offered: true, major: '미술' },
+            'simrihak': { credits: 1, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'gyoyughak': { credits: 1, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'jonggyohak': { credits: 1, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+            'hwangyeong': { credits: 1, category: '생활교양교과', subCategory: '제2외국어/정보/교양', required: false, offered: true, major: null },
+        };
+        
+        // --- SCRIPT START ---
+        
+        let studentData = [];
+        let uploadedFileName = '';
+        let analysisResults = {}; // To store calculated class counts
+
+        const combinedCourseData = RAW_CMS_DATA.map(course => {
+            const details = COURSE_DETAILS[course.slug] || {};
+            return { ...course, ...details };
+        });
+
+        // DOM Elements
+        const uploadInput = document.getElementById('upload');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const maxStudentsInput = document.getElementById('maxStudents');
+        const standardStudentsInput = document.getElementById('standardStudents');
+        const cancelThresholdInput = document.getElementById('cancelThreshold');
+        const contentArea = document.getElementById('contentArea');
+        const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
+
+        // --- Event Listeners ---
+        
+        // Close tooltips when clicking anywhere
+        document.addEventListener('click', (e) => {
+            if (!e.target.matches('.tooltip-trigger')) {
+                document.querySelectorAll('.tooltip-content').forEach(tooltip => {
+                    tooltip.classList.remove('show');
+                });
+            }
+        });
+
+        // Download template button
+        downloadTemplateBtn.addEventListener('click', downloadTemplate);
+
+        // Tab switching
+        const tabs = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                tabContents.forEach(content => content.classList.add('hidden'));
+                const contentId = tab.id.replace('tab', 'content');
+                document.getElementById(contentId).classList.remove('hidden');
+            });
+        });
+
+        // Check if analysis can be run
+        [maxStudentsInput, standardStudentsInput, cancelThresholdInput, uploadInput].forEach(el => {
+            el.addEventListener('input', checkAnalysisReady);
+            el.addEventListener('change', checkAnalysisReady);
+        });
+        
+        // Re-analyze on input change after initial analysis
+        [maxStudentsInput, standardStudentsInput, cancelThresholdInput].forEach(el => {
+             el.addEventListener('change', () => {
+                if (studentData.length > 0) {
+                   runAnalysis();
+                }
+            });
+        });
+
+        // File upload handler
+        uploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            uploadedFileName = file.name;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const data = new Uint8Array(event.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                studentData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                uploadStatus.textContent = `'${uploadedFileName}' 파일이 업로드되었습니다. 총 ${studentData.length - 1}명의 학생 데이터.`;
+                uploadStatus.classList.add('text-green-600');
+                checkAnalysisReady();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Analyze button click
+        analyzeBtn.addEventListener('click', () => {
+            if (analyzeBtn.disabled) return;
+            contentArea.classList.remove('hidden');
+            runAnalysis();
+        });
+
+
+        // --- Core Functions ---
+
+        function toggleTooltip(event) {
+            event.stopPropagation(); // Prevent document click listener from firing immediately
+            const currentTooltip = event.target.nextElementSibling;
+            // Hide all other tooltips
+            document.querySelectorAll('.tooltip-content').forEach(tooltip => {
+                if(tooltip !== currentTooltip) tooltip.classList.remove('show');
+            });
+            // Toggle the current one
+            currentTooltip.classList.toggle('show');
+        }
+
+        function downloadTemplate() {
+            // Main sheet for data entry
+            const maxChoices = 15; // Allow for up to 15 choices
+            const header = ['학번', '이름'];
+            for (let i = 1; i <= maxChoices; i++) {
+                header.push(`선택과목${i}`);
+            }
+            const mainSheetData = [header];
+            const mainWorksheet = XLSX.utils.aoa_to_sheet(mainSheetData);
+            mainWorksheet['!cols'] = [{wch: 15}, {wch: 15}]; // 학번, 이름
+            for (let i = 0; i < maxChoices; i++) {
+                mainWorksheet['!cols'].push({wch: 25}); // 선택과목
+            }
+
+            // Sheet with list of available elective subjects
+            const uniqueElectiveSubjects = [...new Set(combinedCourseData
+                .filter(course => !course.required)
+                .map(course => course.subjectName))]
+                .sort((a, b) => a.localeCompare(b));
+
+            const subjectListData = [['선택 가능 과목 목록 (복사해서 사용하세요)']];
+            uniqueElectiveSubjects.forEach(name => subjectListData.push([name]));
+            
+            const subjectListWorksheet = XLSX.utils.aoa_to_sheet(subjectListData);
+            subjectListWorksheet['!cols'] = [{wch: 40}];
+            
+            // Create workbook and add sheets
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, mainWorksheet, '학생 선택 현황');
+            XLSX.utils.book_append_sheet(workbook, subjectListWorksheet, '선택가능과목');
+
+            XLSX.writeFile(workbook, '설악고_선택과목_입력양식_v2.xlsx');
+        }
+
+        function checkAnalysisReady() {
+            const inputsFilled = maxStudentsInput.value && standardStudentsInput.value && cancelThresholdInput.value;
+            const fileUploaded = studentData.length > 0;
+
+            if (inputsFilled && fileUploaded) {
+                analyzeBtn.disabled = false;
+                analyzeBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                analyzeBtn.classList.add('bg-indigo-500', 'hover:bg-indigo-600');
+            } else {
+                analyzeBtn.disabled = true;
+                analyzeBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+                analyzeBtn.classList.remove('bg-indigo-500', 'hover:bg-indigo-600');
+            }
+        }
+        
+        function runAnalysis() {
+            const studentCounts = countStudentChoices();
+            analysisResults = {}; // Reset results
+
+            renderSemester(1, studentCounts);
+            renderSemester(2, studentCounts);
+        }
+
+
+        function countStudentChoices() {
+            if (studentData.length < 2) return {};
+            
+            const counts = {};
+            const uniqueElectiveSubjects = [...new Set(combinedCourseData
+                .filter(course => !course.required)
+                .map(course => course.subjectName))];
+            uniqueElectiveSubjects.forEach(name => counts[name] = 0);
+
+            for (let i = 1; i < studentData.length; i++) {
+                const row = studentData[i];
+                for (let j = 2; j < row.length; j++) {
+                    const subjectName = row[j];
+                    if (subjectName && counts.hasOwnProperty(subjectName)) {
+                        counts[subjectName]++;
+                    }
+                }
+            }
+            return counts;
+        }
+
+        function renderSemester(semester, studentCounts) {
+            const maxStudents = parseInt(maxStudentsInput.value) || 27;
+            const cancelThreshold = parseInt(cancelThresholdInput.value) || 0;
+            
+            analysisResults[semester] = { offeredCourses: [] };
+
+            // 1. School-Designated Subjects
+            const requiredContainer = document.getElementById(`s${semester}-required`);
+            const excludedSubjects = ['스포츠 생활1', '스포츠 생활2'];
+            const requiredCourses = combinedCourseData.filter(c => 
+                c.semester == semester && 
+                c.required &&
+                !excludedSubjects.includes(c.subjectName)
+            );
+            let requiredHtml = `<h2 class="text-2xl font-bold mb-4 flex items-center gap-x-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-indigo-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+                <span>학교 지정과목</span>
+            </h2><table class="w-full text-sm text-left">
+                <thead class="bg-gray-100"><tr>
+                    <th class="p-2 w-2/5">과목명</th><th>학년</th><th>학점</th><th>분반수</th>
+                </tr></thead><tbody>`;
+            requiredCourses.forEach(course => {
+                const classCount = 5;
+                requiredHtml += `<tr class="border-b">
+                    <td class="p-2">${course.subjectName}</td><td>${course.grade}</td><td>${course.credits}</td><td>${classCount}</td>
+                </tr>`;
+                analysisResults[semester].offeredCourses.push({ ...course, classCount, studentCount: 'N/A' });
+            });
+            requiredHtml += `</tbody></table>`;
+            requiredContainer.innerHTML = requiredHtml;
+
+            // 2. Student-Selected Subjects
+            const electiveContainer = document.getElementById(`s${semester}-elective`);
+            const electiveCourses = combinedCourseData.filter(c => c.semester == semester && !c.required);
+            const groupedBySubCategory = electiveCourses.reduce((acc, course) => {
+                const key = course.subCategory || '기타';
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(course);
+                return acc;
+            }, {});
+
+            let electiveHtml = `<h2 class="text-2xl font-bold mb-4 flex items-center gap-x-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-teal-400 animate-pulse" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                </svg>
+                <span>학생 선택과목</span>
+            </h2>`;
+            for (const subCategory in groupedBySubCategory) {
+                electiveHtml += `<h3 class="text-lg font-semibold mt-4 mb-2 text-indigo-600">${subCategory}</h3>
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-100"><tr>
+                        <th class="p-2 w-2/5">과목명</th><th>학년</th><th>학점</th><th>선택인원</th><th>분반수</th>
+                    </tr></thead><tbody>`;
+                
+                let hasSubjectsInSubCategory = false;
+                groupedBySubCategory[subCategory].forEach(course => {
+                    const studentCount = studentCounts[course.subjectName] || 0;
+                    if (studentCount > 0) {
+                        hasSubjectsInSubCategory = true;
+                        const isCancelled = studentCount < cancelThreshold;
+                        const classCount = isCancelled ? 0 : (Math.ceil(studentCount / maxStudents) || 0);
+                        
+                        electiveHtml += `<tr class="border-b ${isCancelled ? 'text-gray-400 italic' : ''}">
+                            <td class="p-2">${course.subjectName}</td><td>${course.grade}</td><td>${course.credits}</td><td>${studentCount}</td><td>${classCount}</td>
+                        </tr>`;
+                        
+                        if (!isCancelled) {
+                            analysisResults[semester].offeredCourses.push({ ...course, classCount, studentCount });
+                        }
+                    }
+                });
+                if (!hasSubjectsInSubCategory) {
+                    electiveHtml += `<tr><td colspan="5" class="p-4 text-center text-gray-500">선택한 학생이 없습니다.</td></tr>`;
+                }
+                electiveHtml += `</tbody></table>`;
+            }
+            electiveContainer.innerHTML = electiveHtml;
+
+            // 3. Average Hours per Subject
+            renderAverageSection(semester, analysisResults[semester].offeredCourses);
+        }
+
+        function renderAverageSection(semester, offeredCourses) {
+            const averageContainer = document.getElementById(`s${semester}-average`);
+            
+            // Focus Management: Store the ID of the currently focused input if it's within this section
+            const activeElement = document.activeElement;
+            const activeElementId = activeElement.id;
+            const wasInputFocused = activeElement.closest(`#s${semester}-average`) && activeElement.classList.contains('avg-hour-input');
+
+            let averageHtml = `<h2 class="text-2xl font-bold mb-4 flex items-center gap-x-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-amber-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                <span>교과별 평균 시수</span>
+            </h2>`;
+
+            // By Major
+            const byMajor = offeredCourses.reduce((acc, course) => {
+                if(course.major) {
+                    if (!acc[course.major]) acc[course.major] = { total: 0, courses: [] };
+                    acc[course.major].total += (course.classCount * course.credits);
+                    acc[course.major].courses.push(course);
+                }
+                return acc;
+            }, {});
+            
+            averageHtml += `<h3 class="text-lg font-semibold mt-4 mb-2 text-indigo-600">교사 전공별 평균시수</h3>
+                <table class="w-full text-sm text-left">
+                <thead class="bg-gray-100"><tr>
+                    <th class="p-2">전공</th><th>총 시수</th><th>교원수(정원외 포함)</th><th>평균시수</th>
+                </tr></thead><tbody>`;
+            
+            const majors = [...new Set(combinedCourseData.map(c => c.major).filter(Boolean))].sort();
+            majors.forEach(major => {
+                const totalHours = byMajor[major] ? byMajor[major].total : 0;
+                const calculationDetails = byMajor[major] ? byMajor[major].courses
+                    .map(c => `${c.subjectName}(${c.classCount}*${c.credits})`)
+                    .join(' + ') : '개설 과목 없음';
+                
+                const teacherCountId = `s${semester}_major_${major}_teachers`;
+                const teacherCountVal = document.getElementById(teacherCountId) ? document.getElementById(teacherCountId).value : '';
+                const teachers = parseInt(teacherCountVal) || 0;
+                const average = teachers > 0 ? (totalHours / teachers).toFixed(1) : '0.0';
+
+                averageHtml += `<tr class="border-b">
+                    <td class="p-2">${major}</td>
+                    <td class="relative tooltip-container">
+                        <span class="font-bold underline cursor-pointer tooltip-trigger" onclick="toggleTooltip(event)">${totalHours}</span>
+                        <div class="absolute z-10 bg-gray-800 text-white text-xs rounded-lg py-2 px-3 bottom-full mb-2 left-1/2 -translate-x-1/2 w-max max-w-xs shadow-lg tooltip-content">
+                            ${calculationDetails}
+                        </div>
+                    </td>
+                    <td><input type="number" id="${teacherCountId}" class="avg-hour-input w-20 p-1 rounded border-gray-300 text-center bg-gray-50" value="${teacherCountVal}" placeholder="0"></td>
+                    <td>${average}</td>
+                </tr>`;
+            });
+            averageHtml += `</tbody></table>`;
+
+
+            // By SubCategory
+            const bySubCategory = offeredCourses.reduce((acc, course) => {
+                 const key = course.subCategory || '기타';
+                 if (!acc[key]) acc[key] = { total: 0, courses: [] };
+                 acc[key].total += (course.classCount * course.credits);
+                 acc[key].courses.push(course);
+                 return acc;
+            }, {});
+
+            averageHtml += `<h3 class="text-lg font-semibold mt-6 mb-2 text-indigo-600">교과별 평균시수</h3>
+                <table class="w-full text-sm text-left">
+                <thead class="bg-gray-100"><tr>
+                    <th class="p-2">교과</th>
+                    <th>교과총시수</th>
+                    <th>전문계 시수</th>
+                    <th>교원수(정원내)</th>
+                    <th>평균시수(정원내)</th>
+                    <th>교원수(정원 외 포함)</th>
+                    <th>평균시수(정원 외 포함)</th>
+                </tr></thead><tbody>`;
+            
+            const subCategories = [...new Set(combinedCourseData.map(c => c.subCategory).filter(Boolean))].sort();
+
+            subCategories.forEach(subCat => {
+                const totalHours = bySubCategory[subCat] ? bySubCategory[subCat].total : 0;
+                 const calculationDetails = bySubCategory[subCat] ? bySubCategory[subCat].courses
+                    .map(c => `${c.subjectName}(${c.classCount}*${c.credits})`)
+                    .join(' + ') : '개설 과목 없음';
+
+                const vocationalId = `s${semester}_subcat_${subCat}_voc`;
+                const teacherInId = `s${semester}_subcat_${subCat}_in`;
+                const teacherOutId = `s${semester}_subcat_${subCat}_out`;
+
+                const vocationalVal = document.getElementById(vocationalId) ? parseInt(document.getElementById(vocationalId).value) || 0 : 0;
+                const teachersInVal = document.getElementById(teacherInId) ? parseInt(document.getElementById(teacherInId).value) || 0 : 0;
+                const teachersOutVal = document.getElementById(teacherOutId) ? parseInt(document.getElementById(teacherOutId).value) || 0 : 0;
+                
+                const avgIn = teachersInVal > 0 ? ((totalHours + vocationalVal) / teachersInVal).toFixed(1) : '0.0';
+                const avgOut = teachersOutVal > 0 ? ((totalHours + vocationalVal) / teachersOutVal).toFixed(1) : '0.0';
+
+                averageHtml += `<tr class="border-b">
+                    <td class="p-2">${subCat}</td>
+                    <td class="relative tooltip-container">
+                         <span class="font-bold underline cursor-pointer tooltip-trigger" onclick="toggleTooltip(event)">${totalHours}</span>
+                        <div class="absolute z-10 bg-gray-800 text-white text-xs rounded-lg py-2 px-3 bottom-full mb-2 left-1/2 -translate-x-1/2 w-max max-w-xs shadow-lg tooltip-content">
+                            ${calculationDetails}
+                        </div>
+                    </td>
+                    <td><input type="number" id="${vocationalId}" value="${vocationalVal || ''}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
+                    <td><input type="number" id="${teacherInId}" value="${teachersInVal || ''}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
+                    <td>${avgIn}</td>
+                    <td><input type="number" id="${teacherOutId}" value="${teachersOutVal || ''}" class="avg-hour-input w-16 p-1 rounded border-gray-300 text-center bg-gray-50" placeholder="0"></td>
+                    <td>${avgOut}</td>
+                </tr>`;
+            });
+
+            averageHtml += `</tbody></table>`;
+            averageContainer.innerHTML = averageHtml;
+            
+            // Re-attach listeners to new inputs
+            averageContainer.querySelectorAll('.avg-hour-input').forEach(input => {
+                input.addEventListener('change', () => {
+                    renderAverageSection(semester, analysisResults[semester].offeredCourses);
+                });
+            });
+
+            // Restore focus if it was lost
+            if (wasInputFocused && activeElementId) {
+                const newElement = document.getElementById(activeElementId);
+                if (newElement) {
+                    newElement.focus();
+                    newElement.setSelectionRange(newElement.value.length, newElement.value.length);
+                }
+            }
+        }
+
+    </script>
+</body>
+</html>
+
+
+
+
